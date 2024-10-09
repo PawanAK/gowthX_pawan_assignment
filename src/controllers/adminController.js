@@ -53,8 +53,62 @@ const getAssignments = async (req, res) => {
     }
   };
 
+  const acceptAssignment = async (req, res) => {
+    console.log('Attempting to accept assignment:', req.params.id);
+    try {
+      const assignment = await Assignment.findById(req.params.id);
+      if (!assignment) {
+        return res.status(404).json({ message: 'Assignment not found' });
+      }
+      if (assignment.admin.toString() !== req.user.id) {
+        return res.status(403).json({ message: 'Not authorized to accept this assignment' });
+      }
+      if (assignment.status !== 'pending') {
+        return res.status(400).json({ message: 'Assignment is not in pending status' });
+      }
+      console.log(assignment.status);
+      assignment.status = 'accepted';
+      console.log(assignment.status);
+      await assignment.save();
+      
+      console.log('Assignment accepted successfully:', assignment._id);
+      res.json({ message: 'Assignment accepted successfully', assignment });
+    } catch (error) {
+      console.error('Error accepting assignment:', error);
+      res.status(500).json({ message: 'Error accepting assignment', error: error.message });
+    }
+  };
+
+  const rejectAssignment = async (req, res) => {
+    console.log('Attempting to reject assignment:', req.params.id);
+    try {
+      const assignment = await Assignment.findById(req.params.id);
+      if (!assignment) {
+        return res.status(404).json({ message: 'Assignment not found' });
+      }
+      if (assignment.admin.toString() !== req.user.id) {
+        return res.status(403).json({ message: 'Not authorized to reject this assignment' });
+      }
+      if (assignment.status !== 'pending') {
+        return res.status(400).json({ message: 'Assignment is not in pending status' });
+      }
+      
+      assignment.status = 'rejected';
+      await assignment.save();
+      
+      console.log('Assignment rejected successfully:', assignment._id);
+      res.json({ message: 'Assignment rejected successfully', assignment });
+    } catch (error) {
+      console.error('Error rejecting assignment:', error);
+      res.status(500).json({ message: 'Error rejecting assignment', error: error.message });
+    }
+  };
+
+
 module.exports = {
   registerAdmin,
   loginAdmin,
-  getAssignments
+  getAssignments,
+  acceptAssignment,
+  rejectAssignment
 };
