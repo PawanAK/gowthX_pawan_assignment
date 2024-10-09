@@ -7,6 +7,17 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  next();
+});
+
+const userRoutes = require('./routes/userRoutes');
+app.use('/api/users', userRoutes);
+
+const adminRoutes = require('./routes/adminRoutes');
+app.use('/api/admin', adminRoutes);
+
 app.get('/', (req, res) => {
   res.send('Assignment Submission Portal API');
 });
