@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const User = require('../models/user');
 const { generateToken } = require('../utils/jwt');
+const Assignment = require('../models/assignment');
 
 const registerAdmin = async (req, res) => {
   console.log('Attempting to register admin:', req.body.username);
@@ -38,7 +39,22 @@ const loginAdmin = async (req, res) => {
   }
 };
 
+const getAssignments = async (req, res) => {
+    console.log('Fetching assignments for admin:', req.user.username);
+    try {
+      const assignments = await Assignment.find({ admin: req.user.id })
+        .sort({ createdAt: -1 });
+      
+      console.log(`${assignments.length} assignments fetched successfully`);
+      res.json(assignments);
+    } catch (error) {
+      console.error('Error fetching assignments:', error);
+      res.status(500).json({ message: 'Error fetching assignments', error: error.message });
+    }
+  };
+
 module.exports = {
   registerAdmin,
-  loginAdmin
+  loginAdmin,
+  getAssignments
 };
