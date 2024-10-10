@@ -4,65 +4,85 @@ const { generateToken } = require('../utils/jwt');
 const Assignment = require('../models/assignment');
 const mongoose = require('mongoose');
 
+// Utility functions
+
+// Validate string input
+const validateString = (value, minLength, fieldName) => {
+  if (!value || typeof value !== 'string' || value.trim().length < minLength) {
+    throw new Error(`Invalid ${fieldName}. ${fieldName} must be a string with at least ${minLength} characters.`);
+  }
+};
+
+// Standardized error handling
+const handleErrors = (res, error, customMessage) => {
+  console.error(customMessage, error);
+  res.status(500).json({ message: `${customMessage}. Please try again later.`, error: error.message });
+};
+
+// Check if admin is authorized to modify an assignment
+const checkAssignmentAuthorization = (assignment, userId) => {
+  if (!assignment) {
+    throw new Error('Assignment not found. Please check the assignment ID.');
+  }
+  if (assignment.admin.toString() !== userId) {
+    throw new Error('Not authorized to modify this assignment. You can only modify assignments assigned to you.');
+  }
+  if (assignment.status !== 'pending') {
+    throw new Error('Assignment is not in pending status. Only pending assignments can be modified.');
+  }
+};
+
+// Controller functions
+
+// Register a new admin user
 const registerAdmin = async (req, res) => {
   console.log('Attempting to register admin:', req.body.username);
   try {
     const { username, password } = req.body;
+    validateString(username, 3, 'Username');
+    validateString(password, 6, 'Password');
 
-    if (!username || typeof username !== 'string' || username.trim().length < 3) {
-      return res.status(400).json({ message: 'Invalid username. Username must be a string with at least 3 characters.' });
-    }
-
-    if (!password || typeof password !== 'string' || password.length < 6) {
-      return res.status(400).json({ message: 'Invalid password. Password must be a string with at least 6 characters.' });
-    }
-
+    // Check if username already exists
     const existingUser = await User.findOne({ username });
     if (existingUser) {
       return res.status(400).json({ message: 'Username already exists. Please choose a different username.' });
     }
 
+    // Create and save new admin user
     const hashedPassword = await bcrypt.hash(password, 10);
     const admin = new User({ username, password: hashedPassword, role: 'admin' });
     await admin.save();
     console.log('Admin registered successfully:', admin.username);
     res.status(201).json({ message: 'Admin registered successfully' });
   } catch (error) {
-    console.error('Error registering admin:', error);
-    res.status(500).json({ message: 'An error occurred while registering the admin. Please try again later.', error: error.message });
+    handleErrors(res, error, 'Error registering admin');
   }
 };
 
+// Authenticate and log in an admin user
 const loginAdmin = async (req, res) => {
   console.log('Attempting to log in admin:', req.body.username);
   try {
     const { username, password } = req.body;
+    validateString(username, 3, 'Username');
+    validateString(password, 6, 'Password');
 
-    if (!username || typeof username !== 'string') {
-      return res.status(400).json({ message: 'Invalid username. Username must be a non-empty string.' });
-    }
-
-    if (!password || typeof password !== 'string') {
-      return res.status(400).json({ message: 'Invalid password. Password must be a non-empty string.' });
-    }
-
+    // Find admin and check credentials
     const admin = await User.findOne({ username, role: 'admin' });
-    if (!admin) {
+    if (!admin || !(await bcrypt.compare(password, admin.password))) {
       return res.status(400).json({ message: 'Invalid credentials. Please check your username and password.' });
     }
-    const isMatch = await bcrypt.compare(password, admin.password);
-    if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid credentials. Please check your username and password.' });
-    }
+
+    // Generate and send token
     const token = generateToken(admin);
     console.log('Admin logged in successfully:', admin.username);
     res.json({ token, admin: { id: admin._id, username: admin.username, role: admin.role } });
   } catch (error) {
-    console.error('Error logging in admin:', error);
-    res.status(500).json({ message: 'An error occurred while logging in. Please try again later.', error: error.message });
+    handleErrors(res, error, 'Error logging in admin');
   }
 };
 
+// Retrieve all assignments for the logged-in admin
 const getAssignments = async (req, res) => {
   console.log('Fetching assignments for admin:', req.user.username);
   try {
@@ -70,82 +90,44 @@ const getAssignments = async (req, res) => {
       return res.status(401).json({ message: 'Unauthorized. Please log in to access assignments.' });
     }
 
-    const assignments = await Assignment.find({ admin: req.user.id })
-      .sort({ createdAt: -1 });
-    
+    // Fetch and sort assignments
+    const assignments = await Assignment.find({ admin: req.user.id }).sort({ createdAt: -1 });
     console.log(`${assignments.length} assignments fetched successfully`);
     res.json(assignments);
   } catch (error) {
-    console.error('Error fetching assignments:', error);
-    res.status(500).json({ message: 'Error fetching assignments', error: error.message });
+    handleErrors(res, error, 'Error fetching assignments');
   }
 };
 
-const acceptAssignment = async (req, res) => {
-  console.log('Attempting to accept assignment:', req.params.id);
+// Update assignment status (accept or reject)
+const updateAssignmentStatus = async (req, res, newStatus) => {
+  console.log(`Attempting to ${newStatus} assignment:`, req.params.id);
   try {
     const { id } = req.params;
-
     if (!id || !mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: 'Invalid assignment ID. Please provide a valid assignment ID.' });
     }
 
+    // Find assignment and check authorization
     const assignment = await Assignment.findById(id);
-    if (!assignment) {
-      return res.status(404).json({ message: 'Assignment not found. Please check the assignment ID.' });
-    }
+    checkAssignmentAuthorization(assignment, req.user.id);
 
-    if (!req.user || assignment.admin.toString() !== req.user.id) {
-      return res.status(403).json({ message: 'Not authorized to accept this assignment. You can only accept assignments assigned to you.' });
-    }
-
-    if (assignment.status !== 'pending') {
-      return res.status(400).json({ message: 'Assignment is not in pending status. Only pending assignments can be accepted.' });
-    }
-
-    assignment.status = 'accepted';
+    // Update and save assignment status
+    assignment.status = newStatus;
     await assignment.save();
     
-    console.log('Assignment accepted successfully:', assignment._id);
-    res.json({ message: 'Assignment accepted successfully', assignment });
+    console.log(`Assignment ${newStatus} successfully:`, assignment._id);
+    res.json({ message: `Assignment ${newStatus} successfully`, assignment });
   } catch (error) {
-    console.error('Error accepting assignment:', error);
-    res.status(500).json({ message: 'An error occurred while accepting the assignment. Please try again later.', error: error.message });
+    handleErrors(res, error, `Error ${newStatus} assignment`);
   }
 };
 
-const rejectAssignment = async (req, res) => {
-  console.log('Attempting to reject assignment:', req.params.id);
-  try {
-    const { id } = req.params;
+// Accept an assignment
+const acceptAssignment = async (req, res) => updateAssignmentStatus(req, res, 'accepted');
 
-    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: 'Invalid assignment ID. Please provide a valid assignment ID.' });
-    }
-
-    const assignment = await Assignment.findById(id);
-    if (!assignment) {
-      return res.status(404).json({ message: 'Assignment not found. Please check the assignment ID.' });
-    }
-
-    if (!req.user || assignment.admin.toString() !== req.user.id) {
-      return res.status(403).json({ message: 'Not authorized to reject this assignment. You can only reject assignments assigned to you.' });
-    }
-
-    if (assignment.status !== 'pending') {
-      return res.status(400).json({ message: 'Assignment is not in pending status. Only pending assignments can be rejected.' });
-    }
-    
-    assignment.status = 'rejected';
-    await assignment.save();
-    
-    console.log('Assignment rejected successfully:', assignment._id);
-    res.json({ message: 'Assignment rejected successfully', assignment });
-  } catch (error) {
-    console.error('Error rejecting assignment:', error);
-    res.status(500).json({ message: 'An error occurred while rejecting the assignment. Please try again later.', error: error.message });
-  }
-};
+// Reject an assignment
+const rejectAssignment = async (req, res) => updateAssignmentStatus(req, res, 'rejected');
 
 module.exports = {
   registerAdmin,

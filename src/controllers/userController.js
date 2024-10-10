@@ -4,69 +4,80 @@ const User = require('../models/user');
 const Assignment = require('../models/assignment');
 const { generateToken } = require('../utils/jwt');
 
+// Utility functions
+
+// Validate string input
+const validateString = (value, minLength, fieldName) => {
+  if (!value || typeof value !== 'string' || value.trim().length < minLength) {
+    throw new Error(`Invalid ${fieldName}. ${fieldName} must be a string with at least ${minLength} characters.`);
+  }
+};
+
+// Standardized error handling
+const handleErrors = (res, error, customMessage) => {
+  console.error(customMessage, error);
+  res.status(500).json({ message: `${customMessage}. Please try again later.`, error: error.message });
+};
+
+// Controller functions
+
+// Register a new user
 const registerUser = async (req, res) => {
   console.log('Attempting to register user:', req.body.username);
   try {
     const { username, password, role } = req.body;
 
-    if (!username || typeof username !== 'string' || username.trim().length < 3) {
-      return res.status(400).json({ message: 'Invalid username. Username must be a string with at least 3 characters.' });
-    }
-
-    if (!password || typeof password !== 'string' || password.length < 6) {
-      return res.status(400).json({ message: 'Invalid password. Password must be a string with at least 6 characters.' });
-    }
-
+    // Validate input
+    validateString(username, 3, 'Username');
+    validateString(password, 6, 'Password');
     if (role && !['user', 'admin'].includes(role)) {
       return res.status(400).json({ message: 'Invalid role. Role must be either "user" or "admin".' });
     }
 
+    // Check if username already exists
     const existingUser = await User.findOne({ username });
     if (existingUser) {
       return res.status(400).json({ message: 'Username already exists. Please choose a different username.' });
     }
 
+    // Create and save new user
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = new User({ username, password: hashedPassword, role });
     await user.save();
+
     console.log('User registered successfully:', user.username);
     res.status(201).json({ message: 'User registered successfully' });
   } catch (error) {
-    console.error('Error registering user:', error);
-    res.status(500).json({ message: 'An error occurred while registering the user. Please try again later.', error: error.message });
+    handleErrors(res, error, 'Error registering user');
   }
 };
 
+// Authenticate and log in a user
 const loginUser = async (req, res) => {
   console.log('Attempting to log in user:', req.body.username);
   try {
     const { username, password } = req.body;
 
-    if (!username || typeof username !== 'string') {
-      return res.status(400).json({ message: 'Invalid username. Username must be a non-empty string.' });
-    }
+    // Validate input
+    validateString(username, 1, 'Username');
+    validateString(password, 1, 'Password');
 
-    if (!password || typeof password !== 'string') {
-      return res.status(400).json({ message: 'Invalid password. Password must be a non-empty string.' });
-    }
-
+    // Find user and check credentials
     const user = await User.findOne({ username });
-    if (!user) {
+    if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(400).json({ message: 'Invalid credentials. Please check your username and password.' });
     }
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid credentials. Please check your username and password.' });
-    }
+
+    // Generate and send token
     const token = generateToken(user);
     console.log('User logged in successfully:', user.username);
     res.json({ token, user: { id: user._id, username: user.username, role: user.role } });
   } catch (error) {
-    console.error('Error logging in user:', error);
-    res.status(500).json({ message: 'An error occurred while logging in. Please try again later.', error: error.message });
+    handleErrors(res, error, 'Error logging in user');
   }
 };
 
+// Fetch all admin users
 const getAdmins = async (req, res) => {
   console.log('Fetching admins');
   try {
@@ -74,42 +85,37 @@ const getAdmins = async (req, res) => {
     console.log('Admins fetched successfully');
     res.json(admins);
   } catch (error) {
-    console.error('Error fetching admins:', error);
-    res.status(500).json({ message: 'An error occurred while fetching admins. Please try again later.', error: error.message });
+    handleErrors(res, error, 'Error fetching admins');
   }
 };
 
+// Submit a new assignment
 const submitAssignment = async (req, res) => {
   console.log('Attempting to submit assignment');
   try {
     const { task, adminId } = req.body;
     const userId = req.user.id;
 
-    if (!task || typeof task !== 'string' || task.trim().length === 0) {
-      return res.status(400).json({ message: 'Invalid task. Task must be a non-empty string.' });
-    }
-
+    // Validate input
+    validateString(task, 1, 'Task');
     if (!adminId || !mongoose.Types.ObjectId.isValid(adminId)) {
       return res.status(400).json({ message: 'Invalid adminId. Please provide a valid admin ID.' });
     }
 
+    // Check if admin exists
     const adminExists = await User.exists({ _id: adminId, role: 'admin' });
     if (!adminExists) {
       return res.status(404).json({ message: 'Admin not found. Please provide a valid admin ID.' });
     }
 
-    const assignment = new Assignment({
-      userId,
-      task,
-      admin: adminId,
-    });
-
+    // Create and save new assignment
+    const assignment = new Assignment({ userId, task, admin: adminId });
     await assignment.save();
+
     console.log('Assignment submitted successfully');
     res.status(201).json({ message: 'Assignment submitted successfully', assignment });
   } catch (error) {
-    console.error('Error submitting assignment:', error);
-    res.status(500).json({ message: 'An error occurred while submitting the assignment. Please try again later.', error: error.message });
+    handleErrors(res, error, 'Error submitting assignment');
   }
 };
 
