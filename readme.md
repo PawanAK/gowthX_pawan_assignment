@@ -15,12 +15,12 @@ To install the Assignment Submission Portal API, follow these steps:
 
 1. Clone the repository:
    ```
-   git clone <repository-url>
+   git clone https://github.com/PawanAK/gowthX_pawan_assignment.git
    ```
 
 2. Navigate to the project directory:
    ```
-   cd assignment-submission-portal-api
+   cd gowthX_pawan_assignment
    ```
 
 3. Install the dependencies:
