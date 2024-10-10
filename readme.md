@@ -245,4 +245,11 @@ authentication)
   - `utils/`: Utility functions
   - `server.js`: Main application file
 
+## Postman Collection
+
+To make it easier to test and interact with the API, we've created a Postman collection. You can import this collection into Postman to quickly test all the endpoints.
+
+[![Run in Postman](https://run.pstmn.io/button.svg)](https://app.getpostman.com/run-collection/27131324-9e374d49-945a-4b76-9052-af2d0a783857?action=collection%2Ffork&source=rip_markdown&collection-url=entityId%3D27131324-9e374d49-945a-4b76-9052-af2d0a783857%26entityType%3Dcollection%26workspaceId%3Dfe89dd55-c81b-4b41-b04e-e8263baabfb4)
+
+This collection includes all the API endpoints mentioned above, with pre-configured request bodies and headers. 
 
